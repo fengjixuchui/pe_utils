@@ -1,4 +1,4 @@
-cmake_minimum_required ( VERSION 2.8 )
+cmake_minimum_required ( VERSION 3.0 )
 
 project ( pe_check )
 
@@ -15,4 +15,5 @@ set ( PECONV_LIB $<TARGET_FILE:libpeconv> CACHE PATH "PEConvLib library path" )
 #
 add_subdirectory ( pe_check )
 add_subdirectory ( dll_load )
-
+add_subdirectory ( kdb_check )
+add_subdirectory ( syscall_extractor )

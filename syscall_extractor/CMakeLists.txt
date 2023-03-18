@@ -1,14 +1,11 @@
 cmake_minimum_required (VERSION 3.0)
 
-project ( dll_load )
+project ( syscall_extract )
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 
-option(DLL_LOAD_PAUSE_ON_FINISH "dll_load: pause after execution" ON)
-
-if(DLL_LOAD_PAUSE_ON_FINISH)
-    add_compile_definitions(PAUSE_AFTER)
-endif()
+# include libpeconv headers:
+include_directories ( ${PECONV_DIR}/include )
 
 set (srcs
 	main.cpp
@@ -24,5 +21,11 @@ set (rsrc
 )
 
 add_executable ( ${PROJECT_NAME} ${exe_hdrs} ${srcs} ${rsrc} main.cpp )
+
+# link with libpeconv.lib
+target_link_libraries ( ${PROJECT_NAME} ${PECONV_LIB} )
+
+#dependencies:
+add_dependencies( ${PROJECT_NAME} libpeconv )
 
 INSTALL( TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT ${PROJECT_NAME} )

@@ -5,17 +5,35 @@
 #include <peconv.h> // include libPeConv header
 #include "util.h"
 
+bool isSyscallFunc(const std::string &funcName)
+{
+	std::string prefix("Nt");
+	if (funcName.size() < (prefix.size() + 1)) {
+		return false;
+	}
+	if (funcName.compare(0, prefix.size(), prefix) != 0) {
+		return false;
+	}
+	char afterPrefix = funcName.at(prefix.size());
+	if (afterPrefix >= 'A' && afterPrefix <= 'Z') {
+		// the name of the function after the Nt prefix will start in uppercase,
+		// syscalls are in functions like: NtUserSetWindowLongPtr, but not: NtdllDefWindowProc_A
+		return true;
+	}
+	return false;
+}
+
 size_t extract_syscalls(BYTE* pe_buf, size_t pe_size, std::stringstream& outs, size_t startID = 0)
 {
 	std::vector<std::string> names_list;
 	if (!peconv::get_exported_names(pe_buf, names_list)) {
 		return 0;
 	}
-	std::string prefix("Nt");
+
 	std::map<DWORD, std::string> sys_functions;
 	for (auto itr = names_list.begin(); itr != names_list.end(); ++itr) {
 		std::string funcName = *itr;
-		if (!funcName.compare(0, prefix.size(), prefix)) {
+		if (isSyscallFunc(funcName)) {
 			ULONG_PTR va = (ULONG_PTR)peconv::get_exported_func(pe_buf, funcName.c_str());
 			if (!va) continue;
 
@@ -50,31 +68,17 @@ size_t extract_from_dll(IN const std::string &path, size_t startSyscallID, OUT s
 	return extracted_count;
 }
 
-int loadInt(const std::string& str, bool as_hex)
-{
-	int intVal = 0;
-
-	std::stringstream ss;
-	ss << (as_hex ? std::hex : std::dec) << str;
-	ss >> intVal;
-
-	return intVal;
-}
-
 int main(int argc, char *argv[])
 {
-	LPCSTR pe_path = NULL;
-	int startID = 0;
+	std::string outFileName = "syscalls.txt";
 	if (argc < 2) {
 		std::cout << "Extract syscalls from system DLLs (ntdll.dll, win32u.dll)\n"
-			<< "\tOptional Args: <DllPath> <startSyscallID:hex>"
+			<< "Source: https://github.com/hasherezade/pe_utils\n"
+			<< "\tOptional arg: <out path>"
 			<< std::endl;
 	}
 	else {
-		pe_path = argv[1];
-		if (argc > 2) {
-			startID = loadInt(argv[2], true);
-		}
+		outFileName = argv[1];
 	}
 
 	PVOID old_val = NULL;
@@ -83,27 +87,21 @@ int main(int argc, char *argv[])
 	std::stringstream outs;
 	size_t extracted_count = 0;
 
-	if (pe_path) {
-		extracted_count += extract_from_dll(pe_path, startID, outs);
-	}
-	else {
-		char ntdll_path[MAX_PATH] = { 0 };
-		ExpandEnvironmentStringsA("%SystemRoot%\\system32\\ntdll.dll", ntdll_path, MAX_PATH);
-		extracted_count += extract_from_dll(ntdll_path, 0, outs);
+	char ntdll_path[MAX_PATH] = { 0 };
+	ExpandEnvironmentStringsA("%SystemRoot%\\system32\\ntdll.dll", ntdll_path, MAX_PATH);
+	extracted_count += extract_from_dll(ntdll_path, 0, outs);
 
-		char win32u_path[MAX_PATH] = { 0 };
-		ExpandEnvironmentStringsA("%SystemRoot%\\system32\\win32u.dll", win32u_path, MAX_PATH);
-		extracted_count += extract_from_dll(win32u_path, 0x1000, outs);
-	}
+	char win32u_path[MAX_PATH] = { 0 };
+	ExpandEnvironmentStringsA("%SystemRoot%\\system32\\win32u.dll", win32u_path, MAX_PATH);
+	extracted_count += extract_from_dll(win32u_path, 0x1000, outs);
 
 	util::wow64_revert_fs_redirection(&old_val);
 
 	if (!extracted_count) {
 		std::cerr << "Failed to extract syscalls.\n";
-		return 0;
+		return (-1);
 	}
 
-	std::string outFileName = "syscalls.txt";
 	std::ofstream myfile;
 	myfile.open(outFileName);
 	myfile << outs.str();
